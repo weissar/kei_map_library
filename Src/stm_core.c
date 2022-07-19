@@ -143,6 +143,7 @@ uint32_t STM_GetTimerClock(int timerNum)
 {
   uint32_t apbdiv = 0, timerClock = SystemCoreClock;
 
+#if defined(STM32F411xE) // || defined(STM32F413xx)  // || defined ...
   switch(timerNum)
   {
     case 1:
@@ -158,7 +159,14 @@ uint32_t STM_GetTimerClock(int timerNum)
     case 5:
       apbdiv = RCC->CFGR & RCC_CFGR_PPRE1;    // 0x00001C00 - keep bits 12:10
       apbdiv >>= 10;
+      break;
+    default:
+      //TODO emit error for unknown Timer
+      break;
   }
+#else
+#error Valid controller not set - GetTimerClock
+#endif
 
   if ((apbdiv & 0x04) == 0)                   // MSB of that 3 bits is 0 ?
     timerClock = SystemCoreClock;             // not divided, eg. x1
@@ -173,7 +181,7 @@ uint32_t STM_GetBusClock(eBusClocks clk)
   uint32_t bitval = 0;
   uint32_t divider = 1;
 
-#if defined(STM32F411xE) || defined(STM32F413xx)  // | defined ...
+#if defined(STM32F411xE) || defined(STM32F413xx)  // || defined ...
   switch(clk)
   {
     case busClockAHB:

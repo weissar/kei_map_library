@@ -18,8 +18,17 @@ int __io_getchar(void)  // weak declaration too
 }
 // CubeIDE new functionality end
 
+static bool _autoCR = true;             // internal flag
+
 int Usart2Send(char c)
 {
+  if ((c == '\n') && _autoCR)
+  {
+    while(!(USART2->SR & USART_SR_TXE))
+      ;
+    USART2->DR = '\r';                 // write CR before LF
+  }
+
   while(!(USART2->SR & USART_SR_TXE)) // wait for TDR empty
     ;
   USART2->DR = c;                     // write to TDR to send (TXE clears automatically)
