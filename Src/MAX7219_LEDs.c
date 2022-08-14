@@ -106,6 +106,16 @@ static bool _MAX7219_InitSW(int count)
   return true;
 }
 
+uint8_t MAX7219_DecodeSeg(uint8_t val)
+{
+  return to7seg[val % 16];
+}
+
+uint8_t MAX7219_AddPoint(uint8_t val)
+{
+  return val | 0x80;                      // segment P
+}
+
 bool MAX7219_ViewHEX(uint16_t x)
 {
   uint8_t b = 4;
