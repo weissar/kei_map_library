@@ -125,7 +125,7 @@ static bool I2C_Start(void)
       break;
   }
   
-  return w;
+  return (w > 0);
 }
 
 // Perform I2C Stop-Condition
@@ -142,7 +142,7 @@ static bool I2C_Stop(void)
       break;
   }
   
-  return w;
+  return (w > 0);
 }
 
 // send Address
@@ -159,7 +159,7 @@ static bool I2C_Addr(uint8_t adr)
       break;
   }
   
-  return true;
+  return (w > 0);
 }
 
 // send data
@@ -176,7 +176,7 @@ static bool I2C_Write(uint8_t val)
       break;
   }
   
-  return true;
+  return (w > 0);
 }
 
 // read data - ACK = 1 
@@ -209,6 +209,22 @@ bool I2C1_WriteByte(uint8_t devAdr, uint8_t regAdr, uint8_t val)
   I2C_Stop();
 
   return true;    //TODO check return states of all partial functions
+}
+
+bool I2C1_WriteBytes(uint8_t devAdr, uint8_t *pbuf, uint32_t len)
+{
+  bool bbResult = true;
+
+  I2C_Start();
+  I2C_Addr(devAdr);                 // write
+  for(; len; len--)
+  {
+    bbResult = bbResult && I2C_Write(*pbuf);
+    pbuf++;
+  }
+  I2C_Stop();
+
+  return bbResult;
 }
 
 uint8_t I2C1_ReadByte(uint8_t devAdr, uint8_t regAdr)
