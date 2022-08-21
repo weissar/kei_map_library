@@ -38,21 +38,7 @@ bool InitI2C1(i2cSpeed spd)
   I2C1->CR2 &= ~ I2C_CR2_FREQ;    // clear bits FREQ[5:0]
   
   {
-    int apbClk;
-
-#ifdef STM32F411xE
-    {
-      int apb1div = (RCC->CFGR & RCC_CFGR_PPRE1) >> 10;  // u F411 je to bit 10..12
-
-      if ((apb1div & 0x04) == 0) // highest bit from 3 == 0 ?
-        apbClk = SystemCoreClock;  // x1, AHB = sysclock
-      else
-        apbClk = SystemCoreClock >> ((apb1div & 0x03) + 1);
-    }
-#else
-#error I2C init speed - unsupported processor type !!
-#endif
-
+    int apbClk =  STM_GetBusClock(busClockAPB1);
     int apbClkMhz = apbClk / 1000000;          // clock in MHz
 
     I2C1->CR2 = apbClkMhz;
@@ -99,7 +85,7 @@ static void I2C_Reset(void)
 }
 
 
-static const uint16_t _timeoutI2C = MAX_TIMEOUT;
+static const uint16_t _timeoutI2C = I2C_MAX_TIMEOUT;
 
 // read 16-bit status
 static __inline uint16_t I2C_sr(void) 
@@ -116,13 +102,14 @@ static bool I2C_Start(void)
 {
   uint16_t w = _timeoutI2C;
   
+  I2C1->CR1 &= ~I2C_CR1_STOP;
   I2C1->CR1 |= I2C_CR1_START;
   while (!(I2C_sr() & I2C_SR1_SB))      // wait for start condition generated
   {
     if (w)
       w--;
     else
-      break;
+      while(1); //break;
   }
   
   return (w > 0);
@@ -134,15 +121,21 @@ static bool I2C_Stop(void)
   uint16_t w = _timeoutI2C;
 
   I2C1->CR1 |= I2C_CR1_STOP;
-  while (I2C_sr() & (I2C_SR2_MSL << 16))         // Wait until BUSY bit reset          
+  while (I2C_sr() & (I2C_SR2_MSL << 16))         // Wait until MSL bit reset - switch from Master mode
   {
     if (w)
       w--;
     else
-      break;
+      while(1); //break;
   }
-  
-  return (w > 0);
+
+  if (w == 0)         // fail process ?
+  {
+    I2C1->CR1 &= ~I2C_CR1_STOP;           // clear STOP-condition request
+    return false;
+  }
+  else
+    return true;
 }
 
 // send Address
@@ -156,7 +149,7 @@ static bool I2C_Addr(uint8_t adr)
     if (w)
       w--;
     else
-      break;
+      while(1); //break;
   }
   
   return (w > 0);
@@ -168,12 +161,12 @@ static bool I2C_Write(uint8_t val)
   uint16_t w = _timeoutI2C;
   
   I2C1->DR = val;
-  while (!(I2C_sr() & I2C_SR1_BTF))
+  while (!(I2C_sr() & (I2C_SR1_BTF | I2C_SR1_TXE)))       // any of that bits
   {
     if (w)
       w--;
     else
-      break;
+      while(1); //break;
   }
   
   return (w > 0);
@@ -193,7 +186,7 @@ static uint8_t I2C_Read(bool ack)
     if (w)
       w--;
     else
-      break;
+      while(1); //break;
   }
   
   return (I2C1->DR);
@@ -203,7 +196,7 @@ static uint8_t I2C_Read(bool ack)
 bool I2C1_WriteByte(uint8_t devAdr, uint8_t regAdr, uint8_t val)
 { // 7-bit address, last bit R = 1, W = 0
   I2C_Start();
-  I2C_Addr(devAdr);                 // write
+  I2C_Addr(devAdr & 0xfe);          // write
   I2C_Write(regAdr);                // address
   I2C_Write(val);                   // data
   I2C_Stop();
@@ -216,7 +209,24 @@ bool I2C1_WriteBytes(uint8_t devAdr, uint8_t *pbuf, uint32_t len)
   bool bbResult = true;
 
   I2C_Start();
-  I2C_Addr(devAdr);                 // write
+  I2C_Addr(devAdr & 0xfe);          // write
+  for(; len; len--)
+  {
+    bbResult = bbResult && I2C_Write(*pbuf);
+    pbuf++;
+  }
+  I2C_Stop();
+
+  return bbResult;
+}
+
+bool I2C1_WriteBytesPre(uint8_t devAdr, uint8_t preByte, uint8_t *pbuf, uint32_t len)
+{
+  bool bbResult = true;
+
+  I2C_Start();
+  I2C_Addr(devAdr & 0xfe);                 // write
+  bbResult = bbResult && I2C_Write(preByte);
   for(; len; len--)
   {
     bbResult = bbResult && I2C_Write(*pbuf);
@@ -232,7 +242,7 @@ uint8_t I2C1_ReadByte(uint8_t devAdr, uint8_t regAdr)
   uint8_t retval;
 
   I2C_Start();
-  I2C_Addr(devAdr);        // write
+  I2C_Addr(devAdr & 0xfe);        // write
   I2C_Write(regAdr);       // address of first register
   I2C_Start();
   I2C_Addr(devAdr | 1);    // read
@@ -246,7 +256,7 @@ uint8_t I2C1_ReadByte(uint8_t devAdr, uint8_t regAdr)
 bool I2C1_ReadBytes(uint8_t devAdr, uint8_t regAdr, uint8_t *pbuf, uint32_t len)
 { // 7-bit address, last bit R = 1, W = 0
   I2C_Start();
-  I2C_Addr(devAdr);        // write
+  I2C_Addr(devAdr & 0xfe); // write
   I2C_Write(regAdr);       // address of first register
   I2C_Start();
   I2C_Addr(devAdr | 1);    // read

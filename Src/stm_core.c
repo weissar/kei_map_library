@@ -98,13 +98,16 @@ bool STM_SetPinGPIO(GPIO_TypeDef *gpio, uint32_t bitnum, eIoPortModes mode)
       gpio->MODER |= 0x00000002 << (2 * bitnum);    // set bits to 2 (binary 10)
 
       if (mode == ioPortAlternateOC)
+      {
         gpio->OTYPER |= 0x00000001 << bitnum;       // 1 = open-drain, one bit per GPIO
+        gpio->PUPDR &= ~(0x00000001 << (2 * bitnum)); // 01 = pull-up for OC
+      }
       else
         gpio->OTYPER &= ~(0x00000001 << bitnum);    // 0 = push-pull, one bit per GPIO
 
       gpio->OSPEEDR |= 0x00000003 << (2 * bitnum);  // high-speed = 11
-      gpio->PUPDR &= ~(0x00000003 << (2 * bitnum)); // 00 = no pull-up/pull-down
-                                // don't forget set AFR registers !!!
+
+      //!! don't forget set AFR registers !!!
       break;
     case ioPortAnalog:                              // 11 - analog mode
       gpio->MODER |= 0x00000003 << (2 * bitnum);    // set bits
@@ -250,9 +253,9 @@ bool SystemClock_100MHz(eClockSources clkSrc)
     }
   }
 
-  if (!(RCC->CR & RCC_CR_HSION))      // HSI not running ?
+  if (!(RCC->CR & RCC_CR_HSION))    // HSI not running ?
   {
-    RCC->CR |= RCC_CR_HSION;          // enable
+    RCC->CR |= RCC_CR_HSION;        // enable
 
     t = 100;
     while(!(RCC->CR & RCC_CR_HSION) && t)   // wait to ON
@@ -261,20 +264,23 @@ bool SystemClock_100MHz(eClockSources clkSrc)
       return false;
   }
 
-  if (RCC->CR & RCC_CR_PLLON)         // bezi ?
+  if (RCC->CR & RCC_CR_PLLON)     // running ?
   {
-    RCC->CR &= ~RCC_CR_PLLON;         // stop it
+    RCC->CR &= ~RCC_CR_PLLON;     // stop it
   }
 
-  RCC->CFGR &= ~(RCC_CFGR_SW);  // SW = 00 - HSI as source
+  RCC->CFGR &= ~(RCC_CFGR_SW);    // SW = 00 - HSI as source
 
-  RCC->CFGR = 0;       // RESET state, all off
+  RCC->CFGR = 0;                  // RESET state, all off
 
   RCC->CFGR |= 0
-      | 0 << 13        // PPRE2 [15:13] = 0xx = not divided
-      | 4 << 10        // PPRE1 [12:10] = 100 = /2 (max. 50MHz)
-      | 0 << 4         // HPRE  [7:4] = 0xxx = not divided
+      | 0 << 13                   // PPRE2 [15:13] = 0xx = not divided
+// will be set later ...      | 4 << 10        // PPRE1 [12:10] = 100 = /2 (max. 50MHz)
+      | 0 << 4                    // HPRE  [7:4] = 0xxx = not divided
       ;
+
+  //TODO for univerzal using check AHB clock >= 42M (I2C limit]
+  RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;  // 100 = /4 - APB1 can be 50MHz (eg. /2), but I2C cannot
 
   if (clkSrc == clockSourceHSI)
   {
@@ -316,7 +322,7 @@ bool SystemClock_100MHz(eClockSources clkSrc)
   PWR->CR |= PWR_CR_VOS_0 | PWR_CR_VOS_1;   // scale mode 1 - req. for 100MHz
 
   RCC->CFGR |= RCC_CFGR_SW_PLL;
-  t = 1000;
+  t = 1000;                       // longer waiting ...
   while(!((RCC->CFGR & 0x0c) == RCC_CFGR_SWS_PLL) && t)   // wait to verify SWS
     t--;
   if (!t)
