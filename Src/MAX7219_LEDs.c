@@ -1,4 +1,5 @@
 #include "MAX7219_LEDs.h"
+#include "stm_spi.h"
 
 #ifndef SPI_WAIT
 #define SPI_IS_BUSY(SPIx) (((SPIx)->SR & (SPI_SR_TXE | SPI_SR_RXNE)) == 0 || ((SPIx)->SR & SPI_SR_BSY))
@@ -7,6 +8,31 @@
 
 #define USE_SPI_16B
 
+#ifdef _STM_SPI_H
+static STM_SpiDevice deviceSPI =
+{
+  .reqSpeed = 10E6,                         // MAX7219 max. 10MHz
+  .curSpeed = 0,                            // will be calculated
+  .cpha = true, .cpol = true,               // see RM0383 pg. 555/836 (rev 1)
+  .CSPort = GPIOB, .CSPin = 6,
+  .SCLKPort = GPIOA, .SCLKPin = 5,
+  .MISOPort = NULL,
+  .MOSIPort = GPIOA, .MOSIPin = 7,
+#ifdef USE_SPI_16B
+  .spi16b = true,
+#else
+  .spi16b = false,
+#endif
+  .spi = SPI1
+};
+static bool _MAX7219_InitHW(void)
+{
+  STM_SPI_LockDevice(&deviceSPI);
+
+  STM_SPI_UnLockDevice(&deviceSPI);         // free resource, but CS remain
+  return true;
+}
+#else
 static bool _MAX7219_InitHW(void)
 {
   if (!(RCC->APB2ENR & RCC_APB2ENR_SPI1EN))
@@ -39,6 +65,7 @@ static bool _MAX7219_InitHW(void)
 
   return true;
 }
+#endif
 
 static void _MAX7219_SendWord(uint16_t w)
 {
@@ -88,9 +115,12 @@ static const uint8_t to7seg[16] =
 
 static bool _MAX7219_InitSW(int count)
 {
+#ifdef _STM_SPI_H
+  STM_SPI_LockDevice(&deviceSPI);
+#else
   if ((SPI1->CR1 & SPI_CR1_SPE) == 0)
     return false;
-
+#endif
                           // X0xx = NoOP
                           // X1xx - X9xx = Digit 0 .. 7, MSB - DP A B C D E F G
   _MAX7219_SendWord(0x0f00);    // XFxx = display test, xx00 = normal, xx01 = test
@@ -103,7 +133,11 @@ static bool _MAX7219_InitSW(int count)
 //  WaitMs(1000);
 
 //  _MAX7219_SendWord(0x0f00);
-  return true;
+
+#ifdef _STM_SPI_H
+  STM_SPI_UnLockDevice(&deviceSPI);
+#endif
+return true;
 }
 
 uint8_t MAX7219_DecodeSeg(uint8_t val)
@@ -120,6 +154,10 @@ bool MAX7219_ViewHEX(uint16_t x)
 {
   uint8_t b = 4;
 
+#ifdef _STM_SPI_H
+  STM_SPI_LockDevice(&deviceSPI);
+#endif
+
   _MAX7219_SendWord((b << 8) + to7seg[x % 16]);
   x >>= 4; b--;
   _MAX7219_SendWord((b << 8) + to7seg[x % 16]);
@@ -127,6 +165,10 @@ bool MAX7219_ViewHEX(uint16_t x)
   _MAX7219_SendWord((b << 8) + to7seg[x % 16]);
   x >>= 4; b--;
   _MAX7219_SendWord((b << 8) + to7seg[x % 16]);
+
+#ifdef _STM_SPI_H
+  STM_SPI_UnLockDevice(&deviceSPI);
+#endif
   return true;
 }
 
@@ -136,6 +178,10 @@ bool MAX7219_ViewDEC(uint16_t x)
   bool over = x > 9999;
   x %= 10000;
 
+#ifdef _STM_SPI_H
+  STM_SPI_LockDevice(&deviceSPI);
+#endif
+
   _MAX7219_SendWord((b << 8) + to7seg[x % 10]);
   x /= 10; b--;
   _MAX7219_SendWord((b << 8) + to7seg[x % 10]);
@@ -144,24 +190,41 @@ bool MAX7219_ViewDEC(uint16_t x)
   x /= 10; b--;
   _MAX7219_SendWord((b << 8) + to7seg[x % 10]);
 
+#ifdef _STM_SPI_H
+  STM_SPI_UnLockDevice(&deviceSPI);
+#endif
   return over;
 }
 
 bool MAX7219_SetIntensity(uint8_t b)
 {
+#ifdef _STM_SPI_H
+  STM_SPI_LockDevice(&deviceSPI);
+#endif
+
   _MAX7219_SendWord(0x0a00 | b);
+#ifdef _STM_SPI_H
+  STM_SPI_UnLockDevice(&deviceSPI);
+#endif
   return true;
 }
 
 bool MAX7219_BitContent(uint8_t *pData)
 {
-//  for (uint8_t b = 4; b >= 1; b--)
+#ifdef _STM_SPI_H
+  STM_SPI_LockDevice(&deviceSPI);
+#endif
+
+  //  for (uint8_t b = 4; b >= 1; b--)
   for (uint8_t b = 1; b <= 4; b++)
   {
     _MAX7219_SendWord((b << 8) + *pData);
     pData++;
   }
 
+#ifdef _STM_SPI_H
+  STM_SPI_UnLockDevice(&deviceSPI);
+#endif
   return true;
 }
 
