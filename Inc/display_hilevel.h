@@ -26,7 +26,8 @@ void DISP_WriteCharXY(int x, int y, char c);
 void DISP_WriteChar(char c);
 void DISP_WriteString(char *cp);
 void DISP_GotoXY(int colPix, int rowPix);
-bool DISP_Clear(void);
+// bool DISP_Clear(void);
+bool DISP_Fill(uint32_t color);
 
 void DISP_DrawSprite(int x, int y, void *pbuf);
 
