@@ -14,7 +14,8 @@ static STM_SpiDevice deviceSPI =
   .reqSpeed = 10E6,                         // MAX7219 max. 10MHz
   .curSpeed = 0,                            // will be calculated
   .cpha = true, .cpol = true,               // see RM0383 pg. 555/836 (rev 1)
-  .CSPort = GPIOB, .CSPin = 6,
+//  .CSPort = GPIOB, .CSPin = 6,
+  .CSPort = GPIOA, .CSPin = 6,
   .SCLKPort = GPIOA, .SCLKPin = 5,
   .MISOPort = NULL,
   .MOSIPort = GPIOA, .MOSIPin = 7,
@@ -69,20 +70,21 @@ static bool _MAX7219_InitHW(void)
 
 static void _MAX7219_SendWord(uint16_t w)
 {
-  SPI_WAIT(SPI1);
-  GPIOWrite(GPIOB, 6, 0);
+  SPI_WAIT(deviceSPI.spi);
+  GPIOWrite(deviceSPI.CSPort, deviceSPI.CSPin, 0);
 
 #ifdef USE_SPI_16B
   SPI1->DR = w;           // complete 16b value
   SPI_WAIT(SPI1);
 #else
+#error Pozor, SPI a CS natvrdo
   SPI1->DR = (w >> 8);
   while (!(SPI1->SR & SPI_SR_TXE))
     ;                     //! not needed wait to complete, enough is "transmit empty"
   SPI1->DR = w & 0xff;
   SPI_WAIT(SPI1);
 #endif
-  GPIOWrite(GPIOB, 6, 1);           // D10
+  GPIOWrite(deviceSPI.CSPort, deviceSPI.CSPin, 1);
 }
 
 // 7seg decoder
